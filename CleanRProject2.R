@@ -1,0 +1,125 @@
+library(class)
+library(caret)
+library(e1071)
+library(dplyr)
+library(stringr)
+library(tidyr)
+library(sensitivity)
+
+
+HRData = read.csv("CaseStudy2-data.csv",header = TRUE)
+
+HRDatanoatt = read.csv("CaseStudy2CompSet No Attrition.csv", header = TRUE)
+
+HRDatanosalary = read.csv("CaseStudy2CompSet No Salary.csv", header = TRUE)
+
+
+HRData$GenderNum = as.integer(HRData$Gender) 
+
+HRData$MSNum = as.integer(HRData$MaritalStatus)
+
+HRData$Travel = as.integer(HRData$BusinessTravel)
+
+
+
+set.seed(10)
+iterations = 25
+
+NBAccMatrix = matrix(nrow = iterations, ncol = 1)
+NBSensitivityMatrix = matrix(nrow = iterations, ncol = 1)
+NBSpecifictityMatrix = matrix(nrow = iterations, ncol = 1)
+
+splitPerc = .7 
+
+for(j in 1:iterations)
+{
+  
+  trainIndices = sample(1:dim(HRData)[1],round(splitPerc * dim(HRData)[1]))
+  train = HRData[trainIndices,]
+  test = HRData[-trainIndices,]
+  
+  model = naiveBayes(train[,c(2,7,12,15,16,17,18,20,22,27,29,30,31,32,33,34,35,36,38)],as.factor(train$Attrition))
+  table(predict(model,test[,c(2,7,12,15,16,17,18,20,22,27,29,30,31,32,33,34,35,36,38)]),as.factor(test$Attrition))
+  cm = confusionMatrix(table(predict(model,test[,c(2,7,12,15,16,17,18,20,22,27,29,30,31,32,33,34,35,36,38)]),as.factor(test$Attrition)))
+  #masterAcc[j] = cm$overall[1]
+  NBAccMatrix[j,1] = ((cm$table[1,1] + cm$table[2,2])) / ((cm$table[1,1] + cm$table[1,2]) + (cm$table[2,1] + cm$table[2,2]))
+  NBSensitivityMatrix[j,1] = cm$table[1,1] / (cm$table[1,1] + cm$table[2,1])
+  NBSpecifictityMatrix[j,1] = cm$table[2,2] / (cm$table[1,2] + cm$table[2,2])
+}
+
+MeanNBAcc = colMeans(NBAccMatrix)
+MeanNBSens = colMeans(NBSensitivityMatrix)
+MeanNBSpec = colMeans(NBSpecifictityMatrix)
+
+
+MeanNBAcc
+MeanNBSens
+MeanNBSpec
+
+
+#### Graphs
+
+
+HRData %>% select(Attrition, BusinessTravel, DistanceFromHome, WorkLifeBalance) %>%
+  ggpairs(mapping = aes(color = Attrition), title = "Work Life Balance ")
+
+HRData %>% select(Attrition, BusinessTravel) %>%
+  ggpairs(mapping = aes(color = Attrition), title = "Business Travel vs Attrition ")
+
+
+HRData %>% select(Attrition, DistanceFromHome) %>%
+  ggpairs(mapping = aes(color = Attrition), title = "Commute vs Attrition ")
+
+
+HRData %>% select(Attrition, WorkLifeBalance) %>%
+  ggpairs(mapping = aes(color = Attrition), title = "Work Life Balance vs Attrition ")
+
+
+
+
+
+
+#### Predict Monthly Income
+
+#Variables
+set.seed(3)
+iter = 100
+
+ovect = vector(length = iter)
+pvect = vector(length = iter)
+
+for(j in 1:iter)
+{
+  TrainingRows = sample(1:dim(HRData)[1],dim(HRData)[1]-1)
+  trainds = HRData[TrainingRows,]
+  testds = HRData[-TrainingRows,]
+  
+  fitIncome <- lm(MonthlyIncome~JobLevel+JobRole+YearsAtCompany, data = trainds)
+  ovect[j] <- testds$MonthlyIncome
+  pvect[j] <- predict(fitIncome, newdata = testds)
+  
+}
+
+modeldf <- data.frame(ovect,pvect)
+modeldf$Res <- modeldf$ovect - modeldf$pvect
+modeldf$ResSQ = modeldf$Res^2
+sqrt(mean(modeldf$ResSQ))
+
+summary(fitIncome)
+
+#### predict Montly Income
+
+fitIncome <- lm(MonthlyIncome~JobLevel+JobRole+YearsAtCompany, data = HRData)
+
+HRDatanosalary$MonthlyIncomeP <- predict(fitIncome, newdata = HRDatanosalary)
+
+write.csv(HRDatanosalary,"C:/Users/IT/Documents/R/Project2/Case2PredictionsRick Salary.csv")
+
+
+#### Predict Attrition
+
+nbp <- naiveBayes(HRData[,c(2,7,12,15,16,17,18,20,22,27,29,30,31,32,33,34,35,36,38)],HRData$Attrition)
+
+HRDatanoatt$AttritionP = predict(nbp,HRDatanoatt)
+
+write.csv(HRDatanoatt,"C:/Users/IT/Documents/R/Project2/Case2PredictionsRick Attrition.csv")
